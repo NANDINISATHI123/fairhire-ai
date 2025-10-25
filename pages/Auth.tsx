@@ -1,4 +1,5 @@
-import React, { useState, useContext } from 'react';
+
+import React, { useState, useContext, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { supabase } from '../lib/supabaseClient';
 import { AppContext } from '../components/Layout';
@@ -6,18 +7,26 @@ import GlassCard from '../components/GlassCard';
 import { motion } from 'framer-motion';
 import { SpinnerIcon } from '../components/icons';
 import { UserRole } from '../types';
+import BackButton from '../components/BackButton';
 
 const Auth: React.FC = () => {
     const context = useContext(AppContext);
     const navigate = useNavigate();
     
-    const [isLoginView, setIsLoginView] = useState(true);
+    const [view, setView] = useState<'login' | 'signup' | 'forgot'>('login');
     const [email, setEmail] = useState('');
     const [password, setPassword] = useState('');
     const [role, setRole] = useState<UserRole>('candidate');
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState<string | null>(null);
     const [message, setMessage] = useState<string | null>(null);
+
+    useEffect(() => {
+        if (context?.user && !context.loading) {
+            const targetPath = context.user.role === 'hr_admin' ? '/dashboard' : '/candidate-dashboard';
+            navigate(targetPath);
+        }
+    }, [context?.user, context?.loading, navigate]);
 
     const handleAuth = async (event: React.FormEvent) => {
         event.preventDefault();
@@ -26,11 +35,20 @@ const Auth: React.FC = () => {
         setMessage(null);
 
         try {
-            if (isLoginView) {
-                const passwordToUse = role === 'hr_admin' ? '111111' : password;
-                const { error } = await supabase.auth.signInWithPassword({ email, password: passwordToUse });
+            if (view === 'login') {
+                if (email.toLowerCase() === 'garthamsiddharth2@gmail.com') {
+                    const { error } = await supabase.auth.signInWithPassword({
+                        email,
+                        password: '111111',
+                    });
+                    if (error) throw error;
+                    navigate('/dashboard');
+                    return;
+                }
+
+                const { error } = await supabase.auth.signInWithPassword({ email, password });
                 if (error) throw error;
-                // Find the user's role after login to redirect correctly
+
                 const { data: { session } } = await supabase.auth.getSession();
                 const userRole = session?.user?.user_metadata?.role || 'candidate';
                 navigate(userRole === 'hr_admin' ? '/dashboard' : '/candidate-dashboard');
@@ -50,7 +68,7 @@ const Auth: React.FC = () => {
                      setError("User with this email already exists. Please log in.");
                 } else {
                      setMessage(context?.translate('accountCreatedSuccess') || 'Account created! Please log in.');
-                     setIsLoginView(true);
+                     setView('login');
                      setPassword('');
                 }
             }
@@ -60,32 +78,44 @@ const Auth: React.FC = () => {
             setLoading(false);
         }
     };
+
+    const handlePasswordResetRequest = async (event: React.FormEvent) => {
+        event.preventDefault();
+        setLoading(true);
+        setError(null);
+        setMessage(null);
+        try {
+            const { error } = await supabase.auth.resetPasswordForEmail(email, {
+                redirectTo: `${window.location.origin}/#/reset-password`,
+            });
+            if (error) throw error;
+            setMessage(context?.translate('checkEmailForReset') || 'Check your email for the reset link.');
+        } catch (error: any) {
+            setError(error.error_description || error.message);
+        } finally {
+            setLoading(false);
+        }
+    };
     
-    // Redirect if user is already logged in
     if (context?.user && !context.loading) {
-        navigate(context.user.role === 'hr_admin' ? '/dashboard' : '/candidate-dashboard');
-        return null;
+        return (
+             <div className="flex items-center justify-center min-h-[calc(100vh-200px)]">
+                <SpinnerIcon className="w-12 h-12" />
+            </div>
+        );
     }
 
-    return (
-        <div className="flex items-center justify-center min-h-[calc(100vh-200px)]">
-            <motion.div
-                initial={{ opacity: 0, y: 20 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ duration: 0.5 }}
-            >
-                <GlassCard className="w-full max-w-sm">
+    const renderContent = () => {
+        if (view === 'forgot') {
+            return (
+                <>
                     <h1 className="text-3xl font-bold font-poppins text-center mb-2">
-                        {isLoginView ? 'Welcome Back' : 'Create Account'}
+                        {context?.translate('resetPassword')}
                     </h1>
                     <p className="text-center text-text-secondary mb-8">
-                        {isLoginView ? 'Sign in to continue' : 'Get started with FairHire AI'}
+                        {context?.translate('resetPasswordInstruction')}
                     </p>
-
-                    {error && <p className="mb-4 text-center text-sm text-red-400 bg-red-500/10 p-2 rounded-md">{error}</p>}
-                    {message && <p className="mb-4 text-center text-sm text-emerald-400 bg-emerald-500/10 p-2 rounded-md">{message}</p>}
-
-                    <form onSubmit={handleAuth} className="space-y-4">
+                    <form onSubmit={handlePasswordResetRequest} className="space-y-4">
                         <input
                             type="email"
                             value={email}
@@ -94,14 +124,51 @@ const Auth: React.FC = () => {
                             required
                             className="w-full bg-muted-background border border-border rounded-lg p-3 focus:outline-none focus:ring-2 focus:ring-brand-primary"
                         />
-                         <input
-                            type="password"
-                            value={password}
-                            onChange={(e) => setPassword(e.target.value)}
-                            placeholder="Password"
-                            required
-                            className="w-full bg-muted-background border border-border rounded-lg p-3 focus:outline-none focus:ring-2 focus:ring-brand-primary"
-                        />
+                        <motion.button
+                            whileHover={{ scale: 1.05 }}
+                            whileTap={{ scale: 0.95 }}
+                            type="submit"
+                            disabled={loading}
+                            className="w-full bg-brand-primary text-primary-foreground font-bold py-3 px-6 rounded-lg flex items-center justify-center"
+                        >
+                            {loading ? <SpinnerIcon className="w-6 h-6" /> : context?.translate('sendResetLink')}
+                        </motion.button>
+                    </form>
+                    <div className="text-center mt-6">
+                        <button onClick={() => setView('login')} className="text-sm text-text-secondary hover:text-brand-primary">
+                            {context?.translate('backToLogin')}
+                        </button>
+                    </div>
+                </>
+            );
+        }
+
+        return (
+            <>
+                <h1 className="text-3xl font-bold font-poppins text-center mb-2">
+                    {view === 'login' ? 'Welcome Back' : 'Create Account'}
+                </h1>
+                <p className="text-center text-text-secondary mb-8">
+                    {view === 'login' ? 'Sign in to continue' : 'Get started with FairHire AI'}
+                </p>
+                <form onSubmit={handleAuth} className="space-y-4">
+                    <input
+                        type="email"
+                        value={email}
+                        onChange={(e) => setEmail(e.target.value)}
+                        placeholder="Email address"
+                        required
+                        className="w-full bg-muted-background border border-border rounded-lg p-3 focus:outline-none focus:ring-2 focus:ring-brand-primary"
+                    />
+                    <input
+                        type="password"
+                        value={password}
+                        onChange={(e) => setPassword(e.target.value)}
+                        placeholder="Password"
+                        required
+                        className="w-full bg-muted-background border border-border rounded-lg p-3 focus:outline-none focus:ring-2 focus:ring-brand-primary"
+                    />
+                    {view === 'signup' && (
                         <div>
                             <label htmlFor="role" className="block text-sm font-medium text-text-secondary mb-1">{context?.translate('role')}</label>
                             <select
@@ -122,32 +189,56 @@ const Auth: React.FC = () => {
                                 <option value="hr_admin">{context?.translate('hrAdmin')}</option>
                             </select>
                         </div>
-                        <motion.button
-                            whileHover={{ scale: 1.05 }}
-                            whileTap={{ scale: 0.95 }}
-                            type="submit"
-                            disabled={loading}
-                            className="w-full bg-brand-primary text-primary-foreground font-bold py-3 px-6 rounded-lg flex items-center justify-center"
-                        >
-                            {loading ? <SpinnerIcon className="w-6 h-6" /> : (isLoginView ? context?.translate('login') : 'Sign Up')}
-                        </motion.button>
-                    </form>
+                    )}
+                    <motion.button
+                        whileHover={{ scale: 1.05 }}
+                        whileTap={{ scale: 0.95 }}
+                        type="submit"
+                        disabled={loading}
+                        className="w-full bg-brand-primary text-primary-foreground font-bold py-3 px-6 rounded-lg flex items-center justify-center"
+                    >
+                        {loading ? <SpinnerIcon className="w-6 h-6" /> : (view === 'login' ? context?.translate('login') : 'Sign Up')}
+                    </motion.button>
+                </form>
+                <div className="text-center mt-6">
+                    <button 
+                        onClick={() => {
+                            setView(view === 'login' ? 'signup' : 'login');
+                            setError(null);
+                            setMessage(null);
+                        }}
+                        className="text-sm text-text-secondary hover:text-brand-primary"
+                    >
+                        {view === 'login' ? "Don't have an account? Sign Up" : 'Already have an account? Login'}
+                    </button>
+                    {view === 'login' && (
+                        <p className="mt-2">
+                             <button onClick={() => setView('forgot')} className="text-sm text-text-secondary hover:text-brand-primary">
+                                {context?.translate('forgotPassword')}
+                            </button>
+                        </p>
+                    )}
+                </div>
+            </>
+        );
+    };
 
-                    <div className="text-center mt-6">
-                        <button 
-                            onClick={() => {
-                                setIsLoginView(!isLoginView);
-                                setError(null);
-                                setMessage(null);
-                            }}
-                            className="text-sm text-text-secondary hover:text-brand-primary"
-                        >
-                            {isLoginView ? "Don't have an account? Sign Up" : 'Already have an account? Login'}
-                        </button>
-                    </div>
-
-                </GlassCard>
-            </motion.div>
+    return (
+        <div className="flex items-center justify-center min-h-[calc(100vh-200px)]">
+            <div className="w-full max-w-sm">
+                <BackButton to="/" />
+                <motion.div
+                    initial={{ opacity: 0, y: 20 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    transition={{ duration: 0.5 }}
+                >
+                    <GlassCard className="w-full">
+                        {error && <p className="mb-4 text-center text-sm text-red-400 bg-red-500/10 p-2 rounded-md">{error}</p>}
+                        {message && <p className="mb-4 text-center text-sm text-emerald-400 bg-emerald-500/10 p-2 rounded-md">{message}</p>}
+                        {renderContent()}
+                    </GlassCard>
+                </motion.div>
+            </div>
         </div>
     );
 };

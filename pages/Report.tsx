@@ -9,6 +9,9 @@ import FairnessCharts from '../components/FairnessCharts';
 import BackButton from '../components/BackButton';
 import { SpinnerIcon } from '../components/icons';
 import { motion } from 'framer-motion';
+import PeerComparisonChart from '../components/PeerComparisonChart';
+import SkillGrowthHeatmap from '../components/SkillGrowthHeatmap';
+import { fetchHistoricalSkills } from '../lib/supabaseService';
 
 const Report: React.FC = () => {
     const { id } = useParams<{ id: string }>();
@@ -16,6 +19,7 @@ const Report: React.FC = () => {
     const navigate = useNavigate();
 
     const [interview, setInterview] = useState<Interview | null>(null);
+    const [historicalSkills, setHistoricalSkills] = useState<any[]>([]);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState('');
 
@@ -38,23 +42,17 @@ const Report: React.FC = () => {
             }
 
             if (data) {
-                // Security check: Only allow the user who took the interview or an HR admin to see it.
-                if (data.user_id !== context.user.id && context.user.role !== 'hr_admin') {
+                if (data.candidate_id !== context.user.id && context.user.role !== 'hr_admin') {
                     setError('You do not have permission to view this report.');
                     setLoading(false);
                     setTimeout(() => navigate('/'), 3000);
                     return;
                 }
 
-                const formattedData: Interview = {
-                    ...data,
-                    createdAt: data.created_at,
-                    candidateName: data.candidate_name,
-                    jobRole: data.job_role,
-                    overallScore: data.overall_score,
-                    userId: data.user_id,
-                };
-                setInterview(formattedData);
+                setInterview(data as Interview);
+
+                const historicalData = await fetchHistoricalSkills(data.candidate_id);
+                setHistoricalSkills(historicalData);
             }
             setLoading(false);
         };
@@ -88,16 +86,26 @@ const Report: React.FC = () => {
             <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }}>
                 <header className="mb-8">
                     <h1 className="text-4xl font-bold font-poppins">Interview Report</h1>
-                    <p className="text-text-secondary">For {interview.candidateName} - {interview.jobRole}</p>
-                    <p className="text-xs text-text-secondary">{new Date(interview.createdAt).toLocaleString()}</p>
+                    <p className="text-text-secondary">For {interview.candidate_name} - {interview.job_title}</p>
+                    <p className="text-xs text-text-secondary">{new Date(interview.created_at).toLocaleString()}</p>
                 </header>
 
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
-                    {/* Left Column */}
                     <div className="md:col-span-2 space-y-8">
                         <GlassCard>
                             <h2 className="text-2xl font-bold font-poppins mb-4">Summary</h2>
                             <p className="text-text-secondary">{interview.summary}</p>
+                        </GlassCard>
+
+                        <GlassCard>
+                            <h2 className="text-2xl font-bold font-poppins mb-4">Peer Benchmark</h2>
+                            {/* The PeerComparisonChart is now rendered with live data from the interview record. */}
+                            <PeerComparisonChart data={interview.peer_benchmark} />
+                        </GlassCard>
+
+                        <GlassCard>
+                             <h2 className="text-2xl font-bold font-poppins mb-4">Skill Growth</h2>
+                             <SkillGrowthHeatmap data={historicalSkills} />
                         </GlassCard>
 
                         <GlassCard>
@@ -120,13 +128,22 @@ const Report: React.FC = () => {
                         </GlassCard>
                     </div>
 
-                    {/* Right Column */}
                     <div className="space-y-8">
                         <GlassCard className="text-center">
                             <h2 className="text-xl font-bold font-poppins mb-2">Overall Score</h2>
-                            <p className={`text-6xl font-bold ${getScoreColor(interview.overallScore)}`}>
-                                {Math.round(interview.overallScore)}%
+                            <p className={`text-6xl font-bold ${getScoreColor(interview.overall_score)}`}>
+                                {Math.round(interview.overall_score)}%
                             </p>
+                        </GlassCard>
+                        
+                        <GlassCard>
+                            <h2 className="text-xl font-bold font-poppins mb-4">Badges Earned</h2>
+                            <div className="flex flex-wrap gap-2">
+                                {interview.badges.map(badge => (
+                                    <span key={badge} className="bg-amber-500/20 text-amber-400 text-xs font-bold px-2 py-1 rounded-full">{badge}</span>
+                                ))}
+                                {interview.badges.length === 0 && <p className="text-sm text-text-secondary">No badges earned in this interview.</p>}
+                            </div>
                         </GlassCard>
 
                         <GlassCard>

@@ -5,42 +5,42 @@ import { Interview } from '../types';
 import { AppContext } from '../components/Layout';
 import GlassCard from '../components/GlassCard';
 import { SpinnerIcon } from '../components/icons';
+import BackButton from '../components/BackButton';
+import SkillGrowthHeatmap from '../components/SkillGrowthHeatmap';
+import { fetchHistoricalSkills } from '../lib/supabaseService';
 
 const CandidateDashboard: React.FC = () => {
     const context = useContext(AppContext);
     const [interviews, setInterviews] = useState<Interview[]>([]);
+    const [historicalSkills, setHistoricalSkills] = useState<any[]>([]);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
 
     useEffect(() => {
-        const fetchInterviews = async () => {
+        const loadData = async () => {
             if (!context?.user) return;
 
+            setLoading(true);
             const { data, error: dbError } = await supabase
                 .from('interviews')
                 .select('*')
-                .eq('user_id', context.user.id)
+                .eq('candidate_id', context.user.id)
                 .order('created_at', { ascending: false });
             
             if (dbError) {
                 console.error("Error fetching candidate interviews:", dbError.message, dbError);
                 setError(`Failed to fetch your interviews. A common cause is that Row-Level Security (RLS) is enabled on the 'interviews' table in Supabase, but no policy allows read access. Please check your RLS policies. Original error: ${dbError.message}`);
             } else if (data) {
-                const formattedData = data.map((item: any) => ({
-                    ...item,
-                    createdAt: item.created_at,
-                    jobRole: item.job_role,
-                    overallScore: item.overall_score,
-                    candidateName: item.candidate_name,
-                    userId: item.user_id,
-                }));
-                setInterviews(formattedData);
+                setInterviews(data as Interview[]);
+                
+                const skillData = await fetchHistoricalSkills(context.user.id);
+                setHistoricalSkills(skillData);
             }
             setLoading(false);
         };
 
         if (context?.user) {
-            fetchInterviews();
+            loadData();
         } else if (!context?.loading) {
             setLoading(false);
         }
@@ -69,30 +69,39 @@ const CandidateDashboard: React.FC = () => {
         }
 
         return (
-            <div className="space-y-4">
-                {interviews.map(interview => (
-                    <GlassCard key={interview.id} className="!p-0 overflow-hidden">
-                         <div className="flex justify-between items-center p-4">
-                            <div>
-                                <h3 className="font-bold text-lg">{interview.jobRole}</h3>
-                                <p className="text-sm text-text-secondary">{new Date(interview.createdAt).toLocaleString()}</p>
+            <>
+                <div className="space-y-4">
+                    {interviews.map(interview => (
+                        <GlassCard key={interview.id} className="!p-0 overflow-hidden">
+                            <div className="flex justify-between items-center p-4">
+                                <div>
+                                    <h3 className="font-bold text-lg">{interview.job_title}</h3>
+                                    <p className="text-sm text-text-secondary">{new Date(interview.created_at).toLocaleString()}</p>
+                                </div>
+                                <div className="text-center">
+                                    <p className="text-sm text-text-secondary">Overall Score</p>
+                                    <p className={`text-2xl font-bold ${interview.overall_score > 75 ? 'text-emerald-400' : interview.overall_score > 50 ? 'text-amber-400' : 'text-red-400'}`}>
+                                        {Math.round(interview.overall_score)}%
+                                    </p>
+                                </div>
+                                <Link to={`/report/${interview.id}`} className="bg-muted-background hover:bg-muted-hover-background font-bold py-2 px-4 rounded-lg">View Report</Link>
                             </div>
-                            <div className="text-center">
-                                <p className="text-sm text-text-secondary">Overall Score</p>
-                                <p className={`text-2xl font-bold ${interview.overallScore > 75 ? 'text-emerald-400' : interview.overallScore > 50 ? 'text-amber-400' : 'text-red-400'}`}>
-                                    {Math.round(interview.overallScore)}%
-                                </p>
-                            </div>
-                            <Link to={`/report/${interview.id}`} className="bg-muted-background hover:bg-muted-hover-background font-bold py-2 px-4 rounded-lg">View Report</Link>
-                        </div>
+                        </GlassCard>
+                    ))}
+                </div>
+                 {historicalSkills.length > 0 && (
+                    <GlassCard className="mt-8">
+                        <h2 className="text-2xl font-bold font-poppins mb-4">Your Skill Growth</h2>
+                        <SkillGrowthHeatmap data={historicalSkills} />
                     </GlassCard>
-                ))}
-            </div>
+                )}
+            </>
         );
     };
 
     return (
         <div>
+            <BackButton to="/" />
              <div className="flex justify-between items-center mb-6">
                 <h1 className="text-4xl font-bold font-poppins">My Interviews</h1>
                 <Link to="/interview/new" className="bg-brand-primary hover:bg-brand-secondary text-primary-foreground font-bold py-3 px-6 rounded-lg text-lg">

@@ -1,5 +1,7 @@
 
+
 import React, { createContext, useState, useEffect, useCallback, useMemo } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { supabase } from '../lib/supabaseClient';
 import { User } from '@supabase/supabase-js';
 import { Language, UserRole } from '../types';
@@ -29,6 +31,7 @@ const Layout: React.FC<{ children: React.ReactNode }> = ({ children }) => {
     const [language, setLanguage] = useState<Language>('en');
     const [modalContent, setModalContent] = useState<React.ReactNode | null>(null);
     const [theme, setTheme] = useState<Theme>('dark');
+    const navigate = useNavigate();
 
     useEffect(() => {
         const storedTheme = localStorage.getItem('theme') as Theme | null;
@@ -83,6 +86,7 @@ const Layout: React.FC<{ children: React.ReactNode }> = ({ children }) => {
     const handleLogout = async () => {
         await supabase.auth.signOut();
         setUser(null);
+        navigate('/');
     };
     
     const contextValue = useMemo(() => ({

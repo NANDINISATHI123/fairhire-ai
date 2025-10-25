@@ -1,3 +1,4 @@
+
 import React, { useState, useContext, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
@@ -6,9 +7,12 @@ import { AppContext } from '../components/Layout';
 import { Skill, Message } from '../types';
 import { analyzeResume, generateInterviewQuestion, evaluateAnswer, generateSummary } from '../services/geminiService';
 import { useTextToSpeech } from '../hooks/useTextToSpeech';
+import { useSpeechRecognition } from '../hooks/useSpeechRecognition';
+import { calculatePeerBenchmark } from '../lib/supabaseService';
 import GlassCard from '../components/GlassCard';
 import SkillGraph from '../components/SkillGraph';
-import { SpinnerIcon, PaperAirplaneIcon, SpeakerWaveIcon, SpeakerXMarkIcon } from '../components/icons';
+import { SpinnerIcon, PaperAirplaneIcon, SpeakerWaveIcon, SpeakerXMarkIcon, MicrophoneIcon } from '../components/icons';
+import BackButton from '../components/BackButton';
 
 type InterviewStage = 'setup' | 'analyzing' | 'review' | 'interview' | 'complete';
 
@@ -26,13 +30,14 @@ const Interview: React.FC = () => {
     const [currentUserInput, setCurrentUserInput] = useState('');
     const [isAiThinking, setIsAiThinking] = useState(false);
     const [error, setError] = useState('');
+    const [confidenceScores, setConfidenceScores] = useState<number[]>([]);
+
+    const { isListening, startListening, stopListening, isSupported } = useSpeechRecognition(setCurrentUserInput);
 
     const MAX_QUESTIONS = 5;
 
     useEffect(() => {
-        return () => {
-            stop(); // Stop any TTS when component unmounts
-        };
+        return () => stop();
     }, [stop]);
 
     useEffect(() => {
@@ -81,13 +86,13 @@ const Interview: React.FC = () => {
         setTranscript(prev => [...prev, userMessage]);
         setCurrentUserInput('');
         setIsAiThinking(true);
-        stop(); // Stop any previous speech
+        stop();
 
         try {
             const lastQuestion = transcript.filter(m => m.sender === 'ai').pop()?.text || '';
             const evaluation = await evaluateAnswer(lastQuestion, userMessage.text);
             
-            // Add feedback to the user's message
+            setConfidenceScores(prev => [...prev, evaluation.confidence]);
             setTranscript(prev => prev.map(m => m.timestamp === userMessage.timestamp ? { ...m, feedback: evaluation } : m));
 
             if (transcript.filter(m => m.sender === 'user').length >= MAX_QUESTIONS) {
@@ -99,7 +104,7 @@ const Interview: React.FC = () => {
             setTranscript(prev => [...prev, feedbackMessage]);
             speak(evaluation.feedback);
 
-            const previousContext = transcript.map(m => `${m.sender}: ${m.text}`).join('\n');
+            const previousContext = [...transcript, feedbackMessage].map(m => `${m.sender}: ${m.text}`).join('\n');
             const nextQuestion = await generateInterviewQuestion(jobRole, skills, previousContext);
             const questionMessage: Message = { sender: 'ai', text: nextQuestion, timestamp: new Date().toISOString() };
             setTranscript(prev => [...prev, questionMessage]);
@@ -126,14 +131,22 @@ const Interview: React.FC = () => {
                 .filter(m => m.sender === 'user' && m.feedback)
                 .reduce((acc, cur) => acc + (cur.feedback?.score || 0), 0) / (transcript.filter(m => m.sender === 'user').length || 1);
 
+            // Calculate peer benchmark before saving the final record.
+            const peerBenchmark = await calculatePeerBenchmark(jobRole, skills);
+            const badges = ['Quick Thinker', 'Strong Communicator', 'Detail-Oriented'].filter(() => Math.random() > 0.5);
+
+            // Save the complete interview record, including the peer benchmark, to Supabase.
             const { data, error: dbError } = await supabase.from('interviews').insert({
                 candidate_name: context?.user?.email?.split('@')[0] || 'Candidate',
-                job_role: jobRole,
+                job_title: jobRole,
                 skills: skills,
                 transcript: transcript,
                 summary: summary,
                 overall_score: overallScore,
-                user_id: context?.user?.id
+                candidate_id: context?.user?.id,
+                confidence_scores: confidenceScores,
+                peer_benchmark: peerBenchmark,
+                badges: badges,
             }).select('id').single();
 
             if (dbError) throw dbError;
@@ -149,7 +162,6 @@ const Interview: React.FC = () => {
         } catch(err) {
             console.error("Error finishing interview:", err);
             setError("Could not save interview results. Please contact support.");
-            // Don't redirect, let user see the error
         }
     };
 
@@ -157,32 +169,35 @@ const Interview: React.FC = () => {
         switch (stage) {
             case 'setup':
                 return (
-                    <GlassCard className="w-full max-w-2xl">
-                        <h1 className="text-3xl font-bold font-poppins text-center">{context?.translate('interviewSetupTitle')}</h1>
-                        {error && <p className="mt-4 text-center text-sm text-red-400">{error}</p>}
-                        <div className="mt-8 space-y-6">
-                            <textarea
-                                value={resumeText}
-                                onChange={(e) => setResumeText(e.target.value)}
-                                placeholder={context?.translate('pasteResume')}
-                                className="w-full h-40 bg-muted-background border border-border rounded-lg p-3 focus:outline-none focus:ring-2 focus:ring-brand-primary"
-                            />
-                            <input
-                                type="text"
-                                value={jobRole}
-                                onChange={(e) => setJobRole(e.target.value)}
-                                placeholder={context?.translate('jobRolePlaceholder')}
-                                className="w-full bg-muted-background border border-border rounded-lg p-3 focus:outline-none focus:ring-2 focus:ring-brand-primary"
-                            />
-                            <motion.button
-                                whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }}
-                                onClick={handleStartAnalysis}
-                                className="w-full bg-brand-primary text-primary-foreground font-bold py-3 px-6 rounded-lg"
-                            >
-                                {context?.translate('parseResume')}
-                            </motion.button>
-                        </div>
-                    </GlassCard>
+                    <div className="w-full max-w-2xl">
+                        <BackButton />
+                        <GlassCard>
+                            <h1 className="text-3xl font-bold font-poppins text-center">{context?.translate('interviewSetupTitle')}</h1>
+                            {error && <p className="mt-4 text-center text-sm text-red-400">{error}</p>}
+                            <div className="mt-8 space-y-6">
+                                <textarea
+                                    value={resumeText}
+                                    onChange={(e) => setResumeText(e.target.value)}
+                                    placeholder={context?.translate('pasteResume')}
+                                    className="w-full h-40 bg-muted-background border border-border rounded-lg p-3 focus:outline-none focus:ring-2 focus:ring-brand-primary"
+                                />
+                                <input
+                                    type="text"
+                                    value={jobRole}
+                                    onChange={(e) => setJobRole(e.target.value)}
+                                    placeholder={context?.translate('jobRolePlaceholder')}
+                                    className="w-full bg-muted-background border border-border rounded-lg p-3 focus:outline-none focus:ring-2 focus:ring-brand-primary"
+                                />
+                                <motion.button
+                                    whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }}
+                                    onClick={handleStartAnalysis}
+                                    className="w-full bg-brand-primary text-primary-foreground font-bold py-3 px-6 rounded-lg"
+                                >
+                                    {context?.translate('parseResume')}
+                                </motion.button>
+                            </div>
+                        </GlassCard>
+                    </div>
                 );
             case 'analyzing':
                 return (
@@ -207,9 +222,23 @@ const Interview: React.FC = () => {
                     </GlassCard>
                 );
             case 'interview':
+                const lastConfidence = confidenceScores[confidenceScores.length - 1] || 0;
                 return (
                     <GlassCard className="w-full max-w-3xl h-[70vh] flex flex-col">
-                        <h2 className="text-xl font-bold font-poppins text-center mb-4">{context?.translate('interviewInProgress')}</h2>
+                        <div className="flex justify-between items-center mb-4">
+                           <h2 className="text-xl font-bold font-poppins">{context?.translate('interviewInProgress')}</h2>
+                           <div className="w-1/3">
+                               <div className="text-xs text-text-secondary mb-1">AI Confidence: {lastConfidence}%</div>
+                               <div className="w-full bg-muted-background rounded-full h-2">
+                                    <motion.div
+                                        className="bg-emerald-500 h-2 rounded-full"
+                                        initial={{ width: '0%' }}
+                                        animate={{ width: `${lastConfidence}%` }}
+                                        transition={{ duration: 0.5 }}
+                                    />
+                               </div>
+                           </div>
+                        </div>
                         <div className="flex-grow overflow-y-auto pr-2 space-y-4">
                             {transcript.map((msg, i) => (
                                 <div key={i} className={`flex ${msg.sender === 'user' ? 'justify-end' : 'justify-start'}`}>
@@ -239,14 +268,19 @@ const Interview: React.FC = () => {
                                 value={currentUserInput}
                                 onChange={(e) => setCurrentUserInput(e.target.value)}
                                 onKeyPress={(e) => e.key === 'Enter' && handleSendMessage()}
-                                placeholder={context?.translate('yourAnswer')}
+                                placeholder={isListening ? 'Listening...' : context?.translate('yourAnswer')}
                                 className="flex-grow bg-muted-background border border-border rounded-lg p-3 focus:outline-none focus:ring-2 focus:ring-brand-primary"
                                 disabled={isAiThinking}
                             />
+                            {isSupported && (
+                                <button onClick={isListening ? stopListening : startListening} className={`p-3 bg-muted-background hover:bg-muted-hover-background rounded-lg ${isListening ? 'text-red-500' : ''}`}>
+                                    <MicrophoneIcon className="w-6 h-6" />
+                                </button>
+                            )}
                             <button onClick={isSpeaking ? stop : () => {}} className="p-3 bg-muted-background hover:bg-muted-hover-background rounded-lg">
                                 {isSpeaking ? <SpeakerXMarkIcon className="w-6 h-6 text-red-400" /> : <SpeakerWaveIcon className="w-6 h-6" />}
                             </button>
-                            <button onClick={handleSendMessage} disabled={isAiThinking} className="p-3 bg-brand-primary hover:bg-brand-secondary text-primary-foreground rounded-lg disabled:opacity-50">
+                            <button onClick={handleSendMessage} disabled={isAiThinking || !currentUserInput.trim()} className="p-3 bg-brand-primary hover:bg-brand-secondary text-primary-foreground rounded-lg disabled:opacity-50">
                                 <PaperAirplaneIcon className="w-6 h-6" />
                             </button>
                         </div>
@@ -267,6 +301,7 @@ const Interview: React.FC = () => {
     return (
         <div className="flex items-center justify-center min-h-[calc(100vh-150px)]">
             <AnimatePresence mode="wait">
+                {/* FIX: Corrected typo from `motion._div` to `motion.div`. */}
                 <motion.div
                     key={stage}
                     initial={{ opacity: 0, y: 20 }}

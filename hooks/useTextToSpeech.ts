@@ -72,7 +72,9 @@ export const useTextToSpeech = () => {
         setIsSpeaking(false);
 
         try {
-            const base64Audio = await textToSpeech(text);
+            // Sanitize text to remove potential markdown characters that can cause TTS errors
+            const sanitizedText = text.replace(/[*_#`]/g, '');
+            const base64Audio = await textToSpeech(sanitizedText);
             const audioBytes = decode(base64Audio);
             const audioBuffer = await decodeAudioData(audioBytes, audioContext, 24000, 1);
             

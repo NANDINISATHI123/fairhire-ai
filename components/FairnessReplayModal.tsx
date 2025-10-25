@@ -25,7 +25,7 @@ const OnChainProofModal = ({ interview }: { interview: Interview }) => {
                 </div>
                 <div className="flex justify-between">
                     <span className="text-text-secondary">Timestamp:</span>
-                    <span>{new Date(interview.createdAt).toISOString()}</span>
+                    <span>{new Date(interview.created_at).toISOString()}</span>
                 </div>
                  <div className="flex justify-between items-start">
                     <span className="text-text-secondary">Interview ID:</span>
@@ -44,16 +44,16 @@ const FairnessReplayModal = ({ interview }: { interview: Interview }) => {
     const context = useContext(AppContext);
     
     const events = [
-        { time: new Date(interview.createdAt).toLocaleTimeString(), description: "Interview session initiated.", icon: '▶️' },
-        { time: new Date(new Date(interview.createdAt).getTime() + 2000).toLocaleTimeString(), description: "Resume parsed & skills identified.", icon: '📄' },
-        { time: new Date(new Date(interview.createdAt).getTime() + 5000).toLocaleTimeString(), description: "First question generated. Fairness check passed.", icon: '✅' },
+        { time: new Date(interview.created_at).toLocaleTimeString(), description: "Interview session initiated.", icon: '▶️' },
+        { time: new Date(new Date(interview.created_at).getTime() + 2000).toLocaleTimeString(), description: "Resume parsed & skills identified.", icon: '📄' },
+        { time: new Date(new Date(interview.created_at).getTime() + 5000).toLocaleTimeString(), description: "First question generated. Fairness check passed.", icon: '✅' },
         ...interview.transcript.slice(0, 5).map((msg, i) => ({
-             time: new Date(new Date(interview.createdAt).getTime() + 10000 * (i + 1)).toLocaleTimeString(),
+             time: new Date(new Date(interview.created_at).getTime() + 10000 * (i + 1)).toLocaleTimeString(),
              description: msg.sender === 'ai' ? `Question ${i+1} delivered.` : `Answer ${i+1} received. PII scan complete.`,
              icon: msg.sender === 'ai' ? '🤖' : '👤'
         })),
-        { time: new Date(new Date(interview.createdAt).getTime() + 60000).toLocaleTimeString(), description: "Interview concluded. Report generated.", icon: '🏁' },
-        { time: new Date(new Date(interview.createdAt).getTime() + 62000).toLocaleTimeString(), description: "Audit log finalized and ready for review.", icon: '🔒' }
+        { time: new Date(new Date(interview.created_at).getTime() + 60000).toLocaleTimeString(), description: "Interview concluded. Report generated.", icon: '🏁' },
+        { time: new Date(new Date(interview.created_at).getTime() + 62000).toLocaleTimeString(), description: "Audit log finalized and ready for review.", icon: '🔒' }
     ];
 
     if (!context) {
@@ -69,7 +69,7 @@ const FairnessReplayModal = ({ interview }: { interview: Interview }) => {
             <div className="flex justify-between items-center mb-4">
                  <div>
                     <h2 className="text-2xl font-bold text-text-primary">Fairness Replay</h2>
-                    <p className="text-sm text-text-secondary">Audit trail for {interview.candidateName}'s interview.</p>
+                    <p className="text-sm text-text-secondary">Audit trail for {interview.candidate_name}'s interview.</p>
                 </div>
                 <motion.button 
                     whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }}

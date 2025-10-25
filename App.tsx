@@ -8,6 +8,7 @@ import Interview from './pages/Interview';
 import Report from './pages/Report';
 import Dashboard from './pages/Dashboard';
 import CandidateDashboard from './pages/CandidateDashboard';
+import ResetPassword from './pages/ResetPassword';
 
 const App: React.FC = () => {
     return (
@@ -16,6 +17,7 @@ const App: React.FC = () => {
                 <Routes>
                     <Route path="/" element={<Home />} />
                     <Route path="/login" element={<Auth />} />
+                    <Route path="/reset-password" element={<ResetPassword />} />
                     <Route path="/interview/new" element={<Interview />} />
                     <Route path="/report/:id" element={<Report />} />
                     <Route path="/dashboard" element={<Dashboard />} />

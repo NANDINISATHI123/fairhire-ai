@@ -21,14 +21,23 @@ export interface Message {
     feedback?: MessageFeedback;
 }
 
+export interface PeerBenchmark {
+    skill: string;
+    level: number;
+    peerAverage: number;
+}
+
 export interface Interview {
     id: string;
-    createdAt: string;
-    candidateName: string;
-    jobRole: string;
+    created_at: string;
+    candidate_name: string;
+    job_title: string;
     skills: Skill[];
     transcript: Message[];
     summary: string;
-    overallScore: number;
-    userId: string;
+    overall_score: number;
+    candidate_id: string;
+    confidence_scores: number[];
+    badges: string[];
+    peer_benchmark: PeerBenchmark[];
 }
