@@ -1,0 +1,92 @@
+<script type="importmap">
+{
+  "imports": {
+    "react": "https://aistudiocdn.com/react@^19.2.0",
+    "react-dom/": "https://aistudiocdn.com/react-dom@^19.2.0/",
+    "react/": "https://aistudiocdn.com/react@^19.2.0/",
+    "@google/genai": "https://aistudiocdn.com/@google/genai@^1.27.0",
+    "framer-motion": "https://aistudiocdn.com/framer-motion@^12.23.24",
+    "react-router-dom": "https://aistudiocdn.com/react-router-dom@^7.9.4",
+    "recharts": "https://aistudiocdn.com/recharts@^3.3.0",
+    "@supabase/supabase-js": "https://aistudiocdn.com/@supabase/supabase-js@^2.45.0"
+  }
+}
+</script>
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>FairHire AI</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;700&family=Inter:wght@400;500&display=swap" rel="stylesheet">
+    <style>
+      :root, [data-theme="dark"] {
+        --background-color: #0f172a;
+        --card-background: rgba(30, 41, 59, 0.5);
+        --card-border: rgba(51, 65, 85, 0.5);
+        --text-primary-color: #f8fafc;
+        --text-secondary-color: #94a3b8;
+        --brand-primary: #8b5cf6;
+        --brand-secondary: #6366f1;
+        --primary-foreground: #f8fafc;
+        --muted-background: #1e293b;
+        --muted-hover-background: #334155;
+        --border-color: #334155;
+      }
+
+      [data-theme="light"] {
+        --background-color: #f1f5f9;
+        --card-background: rgba(255, 255, 255, 0.6);
+        --card-border: rgba(226, 232, 240, 0.8);
+        --text-primary-color: #0f172a;
+        --text-secondary-color: #475569;
+        --brand-primary: #7c3aed;
+        --brand-secondary: #4f46e5;
+        --primary-foreground: #ffffff;
+        --muted-background: #e2e8f0;
+        --muted-hover-background: #cbd5e1;
+        --border-color: #cbd5e1;
+      }
+
+      body {
+        background-color: var(--background-color);
+        color: var(--text-primary-color);
+        transition: background-color 0.3s, color 0.3s;
+        -webkit-font-smoothing: antialiased;
+        -moz-osx-font-smoothing: grayscale;
+      }
+    </style>
+     <script>
+      tailwind.config = {
+        theme: {
+          extend: {
+            colors: {
+              background: 'var(--background-color)',
+              'text-primary': 'var(--text-primary-color)',
+              'text-secondary': 'var(--text-secondary-color)',
+              'brand-primary': 'var(--brand-primary)',
+              'brand-secondary': 'var(--brand-secondary)',
+              'primary-foreground': 'var(--primary-foreground)',
+              'muted-background': 'var(--muted-background)',
+              'muted-hover-background': 'var(--muted-hover-background)',
+              border: 'var(--border-color)',
+              'card-background': 'var(--card-background)',
+              'card-border': 'var(--card-border)'
+            },
+            fontFamily: {
+              sans: ['Inter', 'sans-serif'],
+              poppins: ['Poppins', 'sans-serif']
+            }
+          }
+        }
+      }
+    </script>
+  </head>
+  <body>
+    <div id="root"></div>
+    <script type="module" src="/index.tsx"></script>
+  </body>
+</html>
