@@ -41,3 +41,9 @@ export interface Interview {
     badges: string[];
     peer_benchmark: PeerBenchmark[];
 }
+
+export interface AnalysisResult {
+    biasScore: number;
+    tone: string;
+    explanation: string;
+}

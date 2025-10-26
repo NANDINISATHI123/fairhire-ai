@@ -15,9 +15,10 @@ import { Interview } from '../types';
 import BiasSimulationModal from '../components/BiasSimulationModal';
 import FairnessReplayModal from '../components/FairnessReplayModal';
 import TemplateManagerModal from '../components/TemplateManagerModal';
+import FairnessVerification from '../components/FairnessVerification';
 
 
-type Tab = 'dashboard' | 'insights' | 'fairness' | 'employees' | 'alerts' | 'admin';
+type Tab = 'dashboard' | 'insights' | 'fairness' | 'fairnessVerification' | 'employees' | 'alerts' | 'admin';
 
 const Dashboard: React.FC = () => {
     const context = useContext(AppContext);
@@ -158,6 +159,9 @@ const Dashboard: React.FC = () => {
                     </div>
                  );
             
+            case 'fairnessVerification':
+                return <FairnessVerification />;
+
             case 'employees':
                  return (
                      <GlassCard>
@@ -222,6 +226,7 @@ const Dashboard: React.FC = () => {
         { id: 'dashboard', label: 'Dashboard' },
         { id: 'insights', label: 'Insights' },
         { id: 'fairness', label: 'Fairness' },
+        { id: 'fairnessVerification', label: 'Fairness Verification' },
         { id: 'employees', label: 'Employees' },
         { id: 'alerts', label: 'Alerts' },
         { id: 'admin', label: 'Admin' },
