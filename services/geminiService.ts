@@ -2,12 +2,11 @@ import { GoogleGenAI, Modality, Type } from "@google/genai";
 // FIX: Imported MessageFeedback type for the new evaluateAnswer function.
 import { Skill, Message, MessageFeedback } from "../types";
 
-const apiKey = process.env.VITE_API_KEY;
+const apiKey = process.env.API_KEY;
 if (!apiKey) {
-    throw new Error("Gemini API key is missing. Ensure VITE_API_KEY is set in your .env file.");
+    throw new Error("Gemini API key is missing. Ensure API_KEY is set in your environment variables.");
 }
 
-// FIX: The API key must be obtained from process.env.API_KEY per the guidelines.
 const ai = new GoogleGenAI({ apiKey });
 
 export const textToSpeech = async (text: string): Promise<string> => {

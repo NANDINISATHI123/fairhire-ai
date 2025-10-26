@@ -2,11 +2,13 @@ import React, { useState, useRef, useCallback } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import GlassCard from './GlassCard';
 import AIEthicsMeter from './AIEthicsMeter';
-import { CameraIcon, UploadIcon, ShieldCheckIcon, InformationCircleIcon, SpinnerIcon } from './icons';
+import { CameraIcon, UploadIcon, ShieldCheckIcon, InformationCircleIcon, SpinnerIcon, StopIcon } from './icons';
 import { AnalysisResult } from '../types';
 
+type CameraState = 'idle' | 'preview' | 'recording' | 'recorded' | 'upload';
+
 const FairnessVerification: React.FC = () => {
-    const [mode, setMode] = useState<'idle' | 'record' | 'upload'>('idle');
+    const [cameraState, setCameraState] = useState<CameraState>('idle');
     const [videoStream, setVideoStream] = useState<MediaStream | null>(null);
     const [videoFile, setVideoFile] = useState<File | null>(null);
     const [isLoading, setIsLoading] = useState(false);
@@ -16,33 +18,93 @@ const FairnessVerification: React.FC = () => {
 
     const videoRef = useRef<HTMLVideoElement>(null);
     const fileInputRef = useRef<HTMLInputElement>(null);
+    const mediaRecorderRef = useRef<MediaRecorder | null>(null);
+    const recordedChunksRef = useRef<Blob[]>([]);
 
     const cleanup = useCallback(() => {
+        if (mediaRecorderRef.current && mediaRecorderRef.current.state === 'recording') {
+            mediaRecorderRef.current.stop();
+        }
+        mediaRecorderRef.current = null;
+        recordedChunksRef.current = [];
+
         if (videoStream) {
             videoStream.getTracks().forEach(track => track.stop());
             setVideoStream(null);
         }
         if (videoRef.current) {
             videoRef.current.srcObject = null;
+            videoRef.current.src = '';
+            videoRef.current.removeAttribute('src');
         }
         setVideoFile(null);
         setAnalysisResult(null);
         setError(null);
-        setMode('idle');
+        setCameraState('idle');
     }, [videoStream]);
 
-    const handleStartRecording = async () => {
+    const handleEnableCamera = async () => {
         cleanup();
+        setError(null);
         try {
-            const stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: false });
+            const stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
             setVideoStream(stream);
-            setMode('record');
             if (videoRef.current) {
                 videoRef.current.srcObject = stream;
             }
-        } catch (err) {
+            setCameraState('preview');
+        } catch (err: any) {
             console.error("Error accessing webcam:", err);
-            setError("Could not access your camera. Please check your browser permissions.");
+            if (err.name === 'NotAllowedError' || err.name === 'PermissionDeniedError') {
+                setError("Camera access was denied. Please enable camera permissions in your browser settings and try again.");
+            } else if (err.name === 'NotFoundError' || err.name === 'DevicesNotFoundError') {
+                setError("No camera found. Please ensure your webcam is connected and not disabled.");
+            } else if (err.name === 'NotReadableError') {
+                 setError("Could not start video source. Your camera might be in use by another application. Please close other apps (like Zoom, Skype, etc.) and try again.");
+            } else {
+                setError("An unknown error occurred while trying to access your camera. Please try again or check your device.");
+            }
+            cleanup();
+        }
+    };
+    
+    const handleStartRecording = () => {
+        if (!videoStream) {
+            setError("Camera stream is not available. Please enable the camera first.");
+            return;
+        }
+
+        setCameraState('recording');
+
+        recordedChunksRef.current = [];
+        const recorder = new MediaRecorder(videoStream);
+        mediaRecorderRef.current = recorder;
+
+        recorder.ondataavailable = (event) => {
+            if (event.data.size > 0) {
+                recordedChunksRef.current.push(event.data);
+            }
+        };
+
+        recorder.onstop = () => {
+            const blob = new Blob(recordedChunksRef.current, { type: 'video/webm' });
+            const file = new File([blob], "recording.webm", { type: "video/webm" });
+            setVideoFile(file);
+            if (videoRef.current) {
+                videoRef.current.srcObject = null;
+                videoRef.current.src = URL.createObjectURL(file);
+            }
+            videoStream.getTracks().forEach(track => track.stop());
+            setVideoStream(null);
+            setCameraState('recorded');
+        };
+
+        recorder.start();
+    };
+
+    const handleStopRecording = () => {
+        if (mediaRecorderRef.current && mediaRecorderRef.current.state === "recording") {
+            mediaRecorderRef.current.stop();
         }
     };
     
@@ -55,32 +117,34 @@ const FairnessVerification: React.FC = () => {
         const file = event.target.files?.[0];
         if (file) {
             setVideoFile(file);
-            setMode('upload');
+            setCameraState('upload');
             if (videoRef.current) {
-                videoRef.current.srcObject = null; // Clear any previous stream
+                videoRef.current.srcObject = null;
                 videoRef.current.src = URL.createObjectURL(file);
             }
         }
     };
 
-    const handleAnalyze = () => {
+    const handleAnalyze = async () => {
+        if (!videoFile) {
+            setError("No video file is available to analyze.");
+            return;
+        }
+
         setIsLoading(true);
         setAnalysisResult(null);
         setError(null);
 
-        // Simulate AI analysis
+        // Simulate API call for demonstration purposes
         setTimeout(() => {
-            const biasScore = Math.floor(Math.random() * 15) + 85; // Score between 85 and 100
-            const tone = ['Neutral', 'Professional', 'Positive'][Math.floor(Math.random() * 3)];
-            const explanation = "AI analysis of speech patterns, tone, and pacing indicates a neutral and professional demeanor. No indicators of potential bias were detected in the interaction. The environment was deemed fair and consistent.";
-
-            setAnalysisResult({ biasScore, tone, explanation });
+            const mockResult: AnalysisResult = {
+                biasScore: 90,
+                tone: 'Neutral',
+                explanation: 'Sample analysis: No bias indicators detected. (Mock Data)',
+            };
+            setAnalysisResult(mockResult);
             setIsLoading(false);
-            
-            if (privacyMode) {
-                 setTimeout(() => cleanup(), 200);
-            }
-        }, 2500);
+        }, 2000);
     };
 
     const renderContent = () => {
@@ -101,65 +165,109 @@ const FairnessVerification: React.FC = () => {
                         <h3 className="text-xl font-bold font-poppins mb-4">Fairness Score</h3>
                         <AIEthicsMeter score={analysisResult.biasScore} />
                     </div>
-                    <div className="space-y-4">
-                        <h3 className="text-xl font-bold font-poppins">Analysis Summary</h3>
-                        <div className="bg-muted-background p-4 rounded-lg">
-                            <p className="text-sm font-semibold text-text-secondary">Bias Risk Score</p>
-                            <p className="text-2xl font-bold text-emerald-400">{100 - analysisResult.biasScore}% Risk</p>
+                    <GlassCard className="!p-6 flex flex-col justify-between">
+                        <div>
+                            <h3 className="text-xl font-bold font-poppins mb-4">Analysis Summary</h3>
+                            <div className="space-y-4">
+                                <div>
+                                    <p className="text-sm font-semibold text-text-secondary">Bias Risk Score</p>
+                                    <p className="text-2xl font-bold text-emerald-400">{100 - analysisResult.biasScore}% Risk</p>
+                                </div>
+                                 <div>
+                                    <p className="text-sm font-semibold text-text-secondary">Detected Emotional Tone</p>
+                                    <p className="text-lg font-bold">{analysisResult.tone}</p>
+                                </div>
+                                 <div>
+                                    <p className="text-sm font-semibold text-text-secondary">AI Fairness Explanation</p>
+                                    <p className="text-sm mt-1">{analysisResult.explanation}</p>
+                                </div>
+                            </div>
                         </div>
-                         <div className="bg-muted-background p-4 rounded-lg">
-                            <p className="text-sm font-semibold text-text-secondary">Detected Emotional Tone</p>
-                            <p className="text-lg font-bold">{analysisResult.tone}</p>
-                        </div>
-                         <div className="bg-muted-background p-4 rounded-lg">
-                            <p className="text-sm font-semibold text-text-secondary">AI Fairness Explanation</p>
-                            <p className="text-sm">{analysisResult.explanation}</p>
-                        </div>
-                        <button onClick={cleanup} className="w-full bg-muted-hover-background font-bold py-2 px-4 rounded-lg">
+                        <button onClick={cleanup} className="mt-6 w-full bg-muted-hover-background font-bold py-2 px-4 rounded-lg">
                             Start New Verification
                         </button>
-                    </div>
+                    </GlassCard>
                 </div>
             );
         }
+
+        const isCameraOn = cameraState === 'recording' || cameraState === 'preview';
+        const hasVideo = cameraState === 'recorded' || cameraState === 'upload';
 
         return (
             <div className="p-6">
                 <div className="relative">
                      <video
                         ref={videoRef}
-                        autoPlay
-                        muted
+                        autoPlay={isCameraOn}
+                        muted={isCameraOn}
+                        controls={hasVideo}
                         playsInline
-                        className={`w-full aspect-video rounded-lg bg-black transition-opacity duration-300 ${mode === 'idle' ? 'opacity-0' : 'opacity-100'}`}
+                        className={`w-full aspect-video rounded-lg bg-black transition-opacity duration-300 ${cameraState === 'idle' ? 'opacity-0' : 'opacity-100'}`}
                     />
-                    {mode === 'idle' && (
+                    {cameraState === 'idle' && (
                         <div className="absolute inset-0 flex flex-col items-center justify-center bg-muted-background rounded-lg">
                             <ShieldCheckIcon className="w-16 h-16 text-brand-primary mb-4" />
                              <h3 className="text-xl font-bold">Ready to Verify</h3>
-                             <p className="text-text-secondary">Record or upload a video to begin.</p>
+                             <p className="text-text-secondary">Enable your camera or upload a video to begin.</p>
                         </div>
+                    )}
+                     {cameraState === 'recording' && (
+                        <div className="absolute top-2 left-2 bg-black/50 text-white text-xs px-2 py-1 rounded-full animate-pulse">Recording...</div>
+                    )}
+                    {(cameraState === 'recorded' || cameraState === 'upload') && (
+                        <div className="absolute top-2 left-2 bg-black/50 text-white text-xs px-2 py-1 rounded-full">Preview</div>
                     )}
                 </div>
 
                 {error && <p className="text-center text-red-400 mt-2 text-sm">{error}</p>}
                 
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mt-4">
-                     <motion.button whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }} onClick={handleStartRecording} className="flex items-center justify-center gap-2 p-4 bg-muted-background hover:bg-muted-hover-background rounded-lg font-semibold">
-                         <CameraIcon className="w-6 h-6" /> Record Video
-                    </motion.button>
-                     <motion.button whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }} onClick={handleUploadClick} className="flex items-center justify-center gap-2 p-4 bg-muted-background hover:bg-muted-hover-background rounded-lg font-semibold">
-                         <UploadIcon className="w-6 h-6" /> Upload Video
-                    </motion.button>
-                    <motion.button
-                        whileHover={{ scale: 1.05 }}
-                        whileTap={{ scale: 0.95 }}
-                        onClick={handleAnalyze}
-                        disabled={!videoStream && !videoFile}
-                        className="p-4 bg-brand-primary text-primary-foreground rounded-lg font-bold disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
-                    >
-                         <ShieldCheckIcon className="w-6 h-6" /> Analyze
-                    </motion.button>
+                    {cameraState === 'idle' && (
+                        <>
+                            <motion.button whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }} onClick={handleEnableCamera} className="flex items-center justify-center gap-2 p-4 bg-muted-background hover:bg-muted-hover-background rounded-lg font-semibold md:col-span-2">
+                                <CameraIcon className="w-6 h-6" /> Enable Camera
+                            </motion.button>
+                            <motion.button whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }} onClick={handleUploadClick} className="flex items-center justify-center gap-2 p-4 bg-muted-background hover:bg-muted-hover-background rounded-lg font-semibold">
+                                <UploadIcon className="w-6 h-6" /> Upload
+                            </motion.button>
+                        </>
+                    )}
+
+                    {cameraState === 'preview' && (
+                         <>
+                            <motion.button whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }} onClick={cleanup} className="p-4 bg-muted-background hover:bg-muted-hover-background rounded-lg font-semibold">
+                                Cancel
+                            </motion.button>
+                            <motion.button whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }} onClick={handleStartRecording} className="md:col-span-2 flex items-center justify-center gap-2 p-4 bg-brand-primary hover:bg-brand-secondary text-primary-foreground rounded-lg font-semibold">
+                                <div className="w-3 h-3 rounded-full bg-white animate-pulse"></div> Start Recording
+                            </motion.button>
+                         </>
+                    )}
+
+                     {cameraState === 'recording' && (
+                        <motion.button whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }} onClick={handleStopRecording} className="md:col-span-3 flex items-center justify-center gap-2 p-4 bg-red-500/80 hover:bg-red-500 text-white rounded-lg font-semibold">
+                            <StopIcon className="w-6 h-6" /> Stop Recording
+                        </motion.button>
+                     )}
+                    
+                    {(cameraState === 'recorded' || cameraState === 'upload') && (
+                        <>
+                            <motion.button whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }} onClick={cleanup} className="p-4 bg-muted-background hover:bg-muted-hover-background rounded-lg font-semibold">
+                                Start Over
+                            </motion.button>
+                            <motion.button
+                                whileHover={{ scale: 1.05 }}
+                                whileTap={{ scale: 0.95 }}
+                                onClick={handleAnalyze}
+                                disabled={!videoFile || cameraState === 'recording'}
+                                className="md:col-span-2 p-4 bg-brand-primary text-primary-foreground rounded-lg font-bold disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+                            >
+                                <ShieldCheckIcon className="w-6 h-6" /> Analyze
+                            </motion.button>
+                        </>
+                    )}
+                    
                      <input type="file" ref={fileInputRef} onChange={handleFileChange} accept="video/*" className="hidden" />
                 </div>
             </div>

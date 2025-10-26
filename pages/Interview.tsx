@@ -19,7 +19,7 @@ type InterviewStage = 'setup' | 'analyzing' | 'review' | 'interview' | 'complete
 const Interview: React.FC = () => {
     const context = useContext(AppContext);
     const navigate = useNavigate();
-    const { speak, stop, isSpeaking, isLoading: isTtsLoading } = useTextToSpeech();
+    const { speak, stop, isSpeaking, isLoading: isTtsLoading, isQuotaExceeded } = useTextToSpeech();
     const chatEndRef = useRef<HTMLDivElement>(null);
 
     const [stage, setStage] = useState<InterviewStage>('setup');
@@ -102,7 +102,7 @@ const Interview: React.FC = () => {
 
             const feedbackMessage: Message = { sender: 'ai', text: evaluation.feedback, timestamp: new Date().toISOString() };
             setTranscript(prev => [...prev, feedbackMessage]);
-            speak(evaluation.feedback);
+            // speak(evaluation.feedback); // This line is removed to conserve API quota.
 
             const previousContext = [...transcript, feedbackMessage].map(m => `${m.sender}: ${m.text}`).join('\n');
             const nextQuestion = await generateInterviewQuestion(jobRole, skills, previousContext);
@@ -161,7 +161,7 @@ const Interview: React.FC = () => {
 
         } catch(err) {
             console.error("Error finishing interview:", err);
-            setError("Could not save interview results. Please contact support.");
+            setError("Could not save interview results. This is likely a Supabase RLS (Row Level Security) issue. Please ensure there is an INSERT policy on the 'interviews' table for authenticated users.");
         }
     };
 
@@ -239,13 +239,22 @@ const Interview: React.FC = () => {
                                </div>
                            </div>
                         </div>
+                        {isQuotaExceeded && (
+                            <div className="p-2 mb-2 text-center text-xs bg-amber-500/20 text-amber-400 rounded-md">
+                                Text-to-speech has been disabled due to API usage limits. The interview will continue without audio.
+                            </div>
+                        )}
                         <div className="flex-grow overflow-y-auto pr-2 space-y-4">
                             {transcript.map((msg, i) => (
                                 <div key={i} className={`flex ${msg.sender === 'user' ? 'justify-end' : 'justify-start'}`}>
                                     <div className={`p-3 rounded-lg max-w-lg ${msg.sender === 'user' ? 'bg-brand-primary text-primary-foreground' : 'bg-muted-background'}`}>
                                         <p>{msg.text}</p>
                                         {msg.sender === 'ai' && i > 0 && (
-                                            <button onClick={() => speak(msg.text)} disabled={isTtsLoading} className="mt-2 text-xs opacity-70 hover:opacity-100 flex items-center gap-1">
+                                            <button 
+                                                onClick={() => speak(msg.text)} 
+                                                disabled={isTtsLoading || isQuotaExceeded} 
+                                                className="mt-2 text-xs opacity-70 hover:opacity-100 flex items-center gap-1 disabled:opacity-30 disabled:cursor-not-allowed"
+                                            >
                                                 <SpeakerWaveIcon className="w-4 h-4" /> Listen
                                             </button>
                                         )}
@@ -277,7 +286,7 @@ const Interview: React.FC = () => {
                                     <MicrophoneIcon className="w-6 h-6" />
                                 </button>
                             )}
-                            <button onClick={isSpeaking ? stop : () => {}} className="p-3 bg-muted-background hover:bg-muted-hover-background rounded-lg">
+                            <button onClick={isSpeaking ? stop : () => {}} disabled={isQuotaExceeded} className="p-3 bg-muted-background hover:bg-muted-hover-background rounded-lg disabled:opacity-30">
                                 {isSpeaking ? <SpeakerXMarkIcon className="w-6 h-6 text-red-400" /> : <SpeakerWaveIcon className="w-6 h-6" />}
                             </button>
                             <button onClick={handleSendMessage} disabled={isAiThinking || !currentUserInput.trim()} className="p-3 bg-brand-primary hover:bg-brand-secondary text-primary-foreground rounded-lg disabled:opacity-50">

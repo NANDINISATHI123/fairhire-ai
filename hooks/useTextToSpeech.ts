@@ -35,6 +35,7 @@ async function decodeAudioData(
 export const useTextToSpeech = () => {
     const [isSpeaking, setIsSpeaking] = useState(false);
     const [isLoading, setIsLoading] = useState(false);
+    const [isQuotaExceeded, setIsQuotaExceeded] = useState(false);
     const audioContextRef = useRef<AudioContext | null>(null);
     const sourceRef = useRef<AudioBufferSourceNode | null>(null);
 
@@ -58,9 +59,14 @@ export const useTextToSpeech = () => {
     }, []);
 
     const speak = useCallback(async (text: string) => {
+        if (isQuotaExceeded) {
+            console.warn("TTS skipped: API quota exceeded.");
+            return;
+        }
+
         const audioContext = getAudioContext();
         if (!audioContext) {
-            alert("Your browser does not support AudioContext.");
+            console.warn("Your browser does not support AudioContext.");
             return;
         }
 
@@ -91,14 +97,28 @@ export const useTextToSpeech = () => {
             sourceRef.current = source;
             setIsSpeaking(true);
 
-        } catch (error) {
-            console.error("Failed to play audio:", error);
-            alert("Sorry, text-to-speech is currently unavailable.");
+        } catch (error: any) {
+             if (error?.toString().includes('429')) {
+                setIsQuotaExceeded(true);
+                console.error(
+                    "Text-to-Speech has been disabled due to API quota limits.",
+                    "To re-enable, please check your Google Cloud billing or wait for the quota to reset.",
+                    "Error details:",
+                    error
+                );
+            } else {
+                 console.error(
+                    "Text-to-Speech failed and will be skipped.",
+                    "This can happen with very long text or if the Gemini API key lacks permissions for the 'gemini-2.5-flash-preview-tts' model.",
+                    "Error details:",
+                    error
+                );
+            }
         } finally {
             setIsLoading(false);
         }
-    }, [getAudioContext, isSpeaking, stop]);
+    }, [getAudioContext, isSpeaking, stop, isQuotaExceeded]);
     
 
-    return { isSpeaking, isLoading, speak, stop };
+    return { isSpeaking, isLoading, speak, stop, isQuotaExceeded };
 };
